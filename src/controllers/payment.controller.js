@@ -78,34 +78,17 @@ exports.stripeWebhookHandler = async (req, res) => {
   const sig = req.headers["stripe-signature"];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-  console.log("=== Stripe Webhook Received ===");
-  console.log("Headers:", req.headers);
-  console.log("Stripe Signature:", sig ? "Present" : "Missing");
-  console.log(
-    "Request rawBody length:",
-    req.rawBody ? req.rawBody.length : "No rawBody"
-  );
-  console.log("Request rawBody type:", typeof req.rawBody);
-
   let event;
 
   try {
     // rawBody must be a Buffer or string with raw payload
     event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    console.log("Stripe event constructed:", event.type);
   } catch (err) {
-    console.error("Stripe webhook signature verification failed.");
-    console.error("Error message:", err.message);
-    console.error("Error stack:", err.stack);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    console.log(
-      "Processing checkout.session.completed for session ID:",
-      session.id
-    );
 
     const userId = session.metadata.userId;
     const courseId = session.metadata.courseId;
