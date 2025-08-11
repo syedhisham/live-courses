@@ -83,6 +83,7 @@ exports.stripeWebhookHandler = async (req, res) => {
   try {
     event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
   } catch (err) {
+    console.log("This is error in webhook stripe: ", err);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
@@ -97,6 +98,7 @@ exports.stripeWebhookHandler = async (req, res) => {
       const course = await Course.findById(courseId);
 
       if (!user || !course) {
+        console.log("User or Course not found");
         return res.status(400).send("User or Course not found");
       }
 
