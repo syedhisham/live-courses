@@ -81,14 +81,17 @@ exports.stripeWebhookHandler = async (req, res) => {
   console.log("=== Stripe Webhook Received ===");
   console.log("Headers:", req.headers);
   console.log("Stripe Signature:", sig ? "Present" : "Missing");
-  console.log("Request rawBody length:", req.rawBody ? req.rawBody.length : "No rawBody");
+  console.log(
+    "Request rawBody length:",
+    req.rawBody ? req.rawBody.length : "No rawBody"
+  );
   console.log("Request rawBody type:", typeof req.rawBody);
 
   let event;
 
   try {
     // rawBody must be a Buffer or string with raw payload
-    event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     console.log("Stripe event constructed:", event.type);
   } catch (err) {
     console.error("Stripe webhook signature verification failed.");
@@ -99,7 +102,10 @@ exports.stripeWebhookHandler = async (req, res) => {
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    console.log("Processing checkout.session.completed for session ID:", session.id);
+    console.log(
+      "Processing checkout.session.completed for session ID:",
+      session.id
+    );
 
     const userId = session.metadata.userId;
     const courseId = session.metadata.courseId;
@@ -121,14 +127,21 @@ exports.stripeWebhookHandler = async (req, res) => {
       if (!user.purchasedCourses.includes(course._id)) {
         user.purchasedCourses.push(course._id);
         await user.save();
-        console.log(`User ${user.email} granted access to course ${course.title}`);
+        console.log(
+          `User ${user.email} granted access to course ${course.title}`
+        );
       } else {
-        console.log(`User ${user.email} already has access to course ${course.title}`);
+        console.log(
+          `User ${user.email} already has access to course ${course.title}`
+        );
       }
 
       return res.json({ received: true });
     } catch (error) {
-      console.error("Error processing checkout.session.completed event:", error);
+      console.error(
+        "Error processing checkout.session.completed event:",
+        error
+      );
       return res.status(500).send("Internal Server Error");
     }
   } else {
