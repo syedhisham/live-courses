@@ -73,3 +73,49 @@ exports.createCheckoutSession = async (req, res) => {
     return sendResponse(res, 500, false, "Internal server error");
   }
 };
+
+exports.stripeWebhookHandler = async (req, res) => {
+  const sig = req.headers["stripe-signature"];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+  } catch (err) {
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+
+    const userId = session.metadata.userId;
+    const courseId = session.metadata.courseId;
+
+    try {
+      const user = await User.findById(userId);
+      const course = await Course.findById(courseId);
+
+      if (!user || !course) {
+        return res.status(400).send("User or Course not found");
+      }
+
+      // Add course to user's purchasedCourses if not already present
+      if (!user.purchasedCourses.includes(course._id)) {
+        user.purchasedCourses.push(course._id);
+        await user.save();
+        console.log(
+          `User ${user.email} granted access to course ${course.title}`
+        );
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Error processing checkout.session.completed:", error);
+      return res.status(500).send("Internal Server Error");
+    }
+  } else {
+    // Return a response for other event types
+    res.json({ received: true });
+  }
+};
