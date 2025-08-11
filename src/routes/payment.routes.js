@@ -14,9 +14,9 @@ router.post(
 );
 
 // Stripe webhook endpoint
-router.post(
-  "/webhook",
-  paymentController.stripeWebhookHandler
-);
+// router.post(
+//   "/webhook",
+//   paymentController.stripeWebhookHandler
+// );
 
 module.exports = router;

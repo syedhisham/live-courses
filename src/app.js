@@ -19,11 +19,13 @@ app.use(morgan("dev"));
 const authRoutes = require("./routes/auth.routes");
 const courseRoutes = require("./routes/course.routes");
 const paymentRoutes = require('./routes/payment.routes');
+const paymentController = require("./controllers/payment.controller");
 
 // Handle webhook route BEFORE express.json()
-app.use(
+app.post(
   '/api/payments/webhook',
-  express.raw({ type: 'application/json' })
+  express.raw({ type: 'application/json' }),
+  paymentController.stripeWebhookHandler
 );
     
 app.use(express.json());
