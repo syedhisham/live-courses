@@ -19,10 +19,12 @@ app.use(morgan("dev"));
 // Routes Import
 const authRoutes = require("./routes/auth.routes");
 const courseRoutes = require("./routes/course.routes");
+const paymentRoutes = require('./routes/payment.routes');
 
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Test Route
 app.get("/", (req, res) => res.send("LiveCourses API is running"));
