@@ -10,18 +10,25 @@ const app = express();
 // Connect to DB
 connectDB();
 
-// Middleware
+// Middleware for CORS, cookies, logging
 app.use(cors());
 app.use(cookieParser());
-app.use(express.json());
 app.use(morgan("dev"));
 
-// Routes Import
+// Import routes
 const authRoutes = require("./routes/auth.routes");
 const courseRoutes = require("./routes/course.routes");
 const paymentRoutes = require('./routes/payment.routes');
 
-// Routes
+// Handle webhook route BEFORE express.json()
+app.use(
+  '/api/payments/webhook',
+  express.raw({ type: 'application/json' })
+);
+    
+app.use(express.json());
+
+// Mount other routes
 app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
 app.use('/api/payments', paymentRoutes);
