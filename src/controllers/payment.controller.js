@@ -78,46 +78,61 @@ exports.stripeWebhookHandler = async (req, res) => {
   const sig = req.headers["stripe-signature"];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
+  console.log("=== Stripe Webhook Received ===");
+  console.log("Headers:", req.headers);
+  console.log("Stripe Signature:", sig ? "Present" : "Missing");
+  console.log("Request rawBody length:", req.rawBody ? req.rawBody.length : "No rawBody");
+  console.log("Request rawBody type:", typeof req.rawBody);
+
   let event;
 
   try {
+    // rawBody must be a Buffer or string with raw payload
     event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+    console.log("Stripe event constructed:", event.type);
   } catch (err) {
-    console.log("This is error in webhook stripe: ", err);
+    console.error("Stripe webhook signature verification failed.");
+    console.error("Error message:", err.message);
+    console.error("Error stack:", err.stack);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
+    console.log("Processing checkout.session.completed for session ID:", session.id);
 
     const userId = session.metadata.userId;
     const courseId = session.metadata.courseId;
+    console.log(`Metadata - userId: ${userId}, courseId: ${courseId}`);
 
     try {
       const user = await User.findById(userId);
       const course = await Course.findById(courseId);
 
-      if (!user || !course) {
-        console.log("User or Course not found");
-        return res.status(400).send("User or Course not found");
+      if (!user) {
+        console.warn(`User not found: ${userId}`);
+        return res.status(400).send("User not found");
+      }
+      if (!course) {
+        console.warn(`Course not found: ${courseId}`);
+        return res.status(400).send("Course not found");
       }
 
-      // Add course to user's purchasedCourses if not already present
       if (!user.purchasedCourses.includes(course._id)) {
         user.purchasedCourses.push(course._id);
         await user.save();
-        console.log(
-          `User ${user.email} granted access to course ${course.title}`
-        );
+        console.log(`User ${user.email} granted access to course ${course.title}`);
+      } else {
+        console.log(`User ${user.email} already has access to course ${course.title}`);
       }
 
-      res.json({ received: true });
+      return res.json({ received: true });
     } catch (error) {
-      console.error("Error processing checkout.session.completed:", error);
+      console.error("Error processing checkout.session.completed event:", error);
       return res.status(500).send("Internal Server Error");
     }
   } else {
-    // Return a response for other event types
-    res.json({ received: true });
+    console.log(`Unhandled event type: ${event.type}`);
+    return res.json({ received: true });
   }
 };
