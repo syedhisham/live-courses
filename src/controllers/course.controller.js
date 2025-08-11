@@ -1,80 +1,166 @@
-const Course = require('../models/course.model');
-const { generateUploadURL } = require('../services/s3Service');
+const Course = require("../models/course.model");
+const { generateUploadURL } = require("../services/s3Service");
+const { sendResponse } = require("../utils/sendResponse");
+const mongoose = require("mongoose");
 
-// Create a new course (instructor only)
 exports.createCourse = async (req, res) => {
   try {
     const { title, description, price } = req.body;
-    const instructor = req.user._id; // from auth middleware
+    const instructor = req.user._id;
+
+    if (!title || !price) {
+      return sendResponse(res, 400, false, "Title and price are required");
+    }
 
     const course = await Course.create({
       title,
       description,
       price,
       instructor,
-      materials: []
+      materials: [],
     });
 
-    res.status(201).json(course);
+    return sendResponse(res, 201, true, "Course created successfully", course);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Create course error:", err);
+    return sendResponse(res, 500, false, "Internal server error");
   }
 };
 
 // Request presigned URL for file upload
 exports.getUploadURL = async (req, res) => {
   try {
-    const { fileName, fileType } = req.body;
-    if (!fileName || !fileType) {
-      return res.status(400).json({ message: 'fileName and fileType are required' });
+    const instructorId = req.user._id;
+    const { courseId } = req.params;
+    const { fileName, contentType } = req.body;
+
+    if (!fileName || !contentType) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "fileName and contentType are required"
+      );
     }
 
-    // Construct key: organize by instructorId/courseId/timestamp_filename
-    const instructorId = req.user._id.toString();
-    const timestamp = Date.now();
-    const key = `courses/${instructorId}/${timestamp}_${fileName}`;
+    // Check course exists and belongs to instructor
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return sendResponse(res, 404, false, "Course not found");
+    }
+    if (course.instructor.toString() !== instructorId.toString()) {
+      return sendResponse(
+        res,
+        403,
+        false,
+        "Access denied: Not the course instructor"
+      );
+    }
 
-    const uploadURL = await generateUploadURL(key, fileType);
-    res.json({ uploadURL, key }); // key will be saved in course materials after upload
+    // Construct S3 key (e.g., courses/{courseId}/{uniqueFileName})
+    const timestamp = Date.now();
+    const key = `courses/${courseId}/${timestamp}-${fileName}`;
+
+    const url = await generateUploadURL(key, contentType);
+
+    return sendResponse(res, 200, true, "Upload URL generated", {
+      uploadURL: url,
+      key,
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Error generating upload URL:", err);
+    return sendResponse(res, 500, false, "Internal server error");
   }
 };
 
 // Add uploaded file URL to course materials
 exports.addMaterialToCourse = async (req, res) => {
   try {
-    const { courseId, key } = req.body;
-    if (!courseId || !key) {
-      return res.status(400).json({ message: 'courseId and key are required' });
+    const instructorId = req.user._id;
+    const { courseId } = req.params;
+    const { key, url, filename, contentType } = req.body;
+
+    if (!key || !url) {
+      return sendResponse(res, 400, false, "Material key and url are required");
     }
 
     const course = await Course.findById(courseId);
-    if (!course) return res.status(404).json({ message: 'Course not found' });
-
-    // Check if current user is instructor of the course
-    if (course.instructor.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized' });
+    if (!course) {
+      return sendResponse(res, 404, false, "Course not found");
     }
 
-    // Construct the S3 URL (private, but we will generate signed URLs for downloads later)
-    const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+    if (course.instructor.toString() !== instructorId.toString()) {
+      return sendResponse(
+        res,
+        403,
+        false,
+        "Access denied: Not the course instructor"
+      );
+    }
 
-    course.materials.push(fileUrl);
+    // Check if material already added by key
+    const exists = course.materials.some((material) => material.key === key);
+    if (exists) {
+      return sendResponse(res, 400, false, "Material already added");
+    }
+
+    course.materials.push({
+      key,
+      url,
+      filename,
+      contentType,
+      uploadedAt: new Date(),
+    });
     await course.save();
 
-    res.json({ message: 'Material added to course', fileUrl });
+    return sendResponse(res, 200, true, "Material added to course", {
+      materials: course.materials,
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Error adding material to course:", err);
+    return sendResponse(res, 500, false, "Internal server error");
   }
 };
 
-// List courses (optionally filter by instructor or student purchase later)
 exports.listCourses = async (req, res) => {
   try {
-    const courses = await Course.find().populate('instructor', 'name email');
-    res.json(courses);
+    const courses = await Course.find().populate("instructor", "name email");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Courses retrieved successfully",
+      courses
+    );
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error("Error fetching courses:", err);
+    return sendResponse(res, 500, false, "Internal server error");
+  }
+};
+
+exports.fetchCourseById = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+
+    if (!courseId) {
+      return sendResponse(res, 400, false, "Course ID is required");
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return sendResponse(res, 400, false, "Invalid course ID format");
+    }
+
+    const course = await Course.findById(courseId).populate(
+      "instructor",
+      "name email"
+    );
+    if (!course) {
+      return sendResponse(res, 404, false, "Course not found");
+    }
+
+    return sendResponse(res, 200, true, "Course fetched successfully", course);
+  } catch (err) {
+    console.error("Error fetching course by ID:", err);
+    return sendResponse(res, 500, false, "Internal server error");
   }
 };

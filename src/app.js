@@ -1,11 +1,9 @@
-require('dotenv').config();
-const express = require('express');
-const connectDB = require('./config/db');
-const morgan = require('morgan');
-const cors = require('cors');
-
-
-
+require("dotenv").config();
+const express = require("express");
+const connectDB = require("./config/db");
+const morgan = require("morgan");
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
 
 const app = express();
 
@@ -14,19 +12,19 @@ connectDB();
 
 // Middleware
 app.use(cors());
+app.use(cookieParser());
 app.use(express.json());
-app.use(morgan('dev'));
+app.use(morgan("dev"));
 
 // Routes Import
-const authRoutes = require('./routes/auth.routes');
-const courseRoutes = require('./routes/course.routes');
+const authRoutes = require("./routes/auth.routes");
+const courseRoutes = require("./routes/course.routes");
 
 // Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/courses', courseRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/courses", courseRoutes);
 
-
-// Health check
-app.get('/', (req, res) => res.send('LiveCourses API is running'));
+// Test Route
+app.get("/", (req, res) => res.send("LiveCourses API is running"));
 
 module.exports = app;

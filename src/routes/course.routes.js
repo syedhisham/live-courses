@@ -1,18 +1,32 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const courseController = require('../controllers/courseController');
-const auth = require('../middleware/auth');
+const courseController = require("../controllers/course.controller");
+const auth = require("../middleware/auth.middleware");
+const instructorOnly = require("../middleware/instructor-only.middleware");
 
 // Create course (instructor only)
-router.post('/', auth, courseController.createCourse);
+router.post("/create", auth, instructorOnly, courseController.createCourse);
 
-// Get presigned upload URL
-router.post('/upload-url', auth, courseController.getUploadURL);
+// Generate S3 upload URL
+router.post(
+  "/:courseId/materials/upload-url",
+  auth,
+  instructorOnly,
+  courseController.getUploadURL
+);
 
-// Add uploaded material to course
-router.post('/add-material', auth, courseController.addMaterialToCourse);
+// Add uploaded file key to course materials
+router.post(
+  "/:courseId/materials",
+  auth,
+  instructorOnly,
+  courseController.addMaterialToCourse
+);
 
 // List all courses
-router.get('/', courseController.listCourses);
+router.get("/list", courseController.listCourses);
+
+// Fetch course by ID
+router.get("/fetch/:courseId", courseController.fetchCourseById);
 
 module.exports = router;

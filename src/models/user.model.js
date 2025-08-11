@@ -7,6 +7,11 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     role: { type: String, enum: ["instructor", "student"], default: "student" },
+    stripeCustomerId: { type: String, default: null },
+    purchasedCourses: [{ type: mongoose.Schema.Types.ObjectId, ref: "Course" }],
+
+    // Optional: Payment history or status (can be expanded later)
+    // payments: [{ type: mongoose.Schema.Types.ObjectId, ref: "Payment" }],
   },
   { timestamps: true }
 );

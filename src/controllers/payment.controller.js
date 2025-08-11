@@ -1,0 +1,75 @@
+const Stripe = require("stripe");
+const Course = require("../models/course.model");
+const User = require("../models/user.model");
+const { sendResponse } = require("../utils/sendResponse");
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+exports.createCheckoutSession = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { courseId } = req.body;
+
+    if (!courseId) {
+      return sendResponse(res, 400, false, "Course ID is required");
+    }
+
+    // Find course and check existence
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return sendResponse(res, 404, false, "Course not found");
+    }
+
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return sendResponse(res, 401, false, "User not found");
+    }
+
+    // Create Stripe customer if not exists
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        name: user.name,
+      });
+      customerId = customer.id;
+      user.stripeCustomerId = customerId;
+      await user.save();
+    }
+
+    // Create checkout session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "payment",
+      customer: customerId,
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: course.title,
+              description: course.description,
+            },
+            unit_amount: Math.round(course.price * 100), // price in cents
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: `${process.env.CLIENT_URL}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.CLIENT_URL}/payment-cancelled`,
+      metadata: {
+        userId: user._id.toString(),
+        courseId: course._id.toString(),
+      },
+    });
+
+    return sendResponse(res, 200, true, "Checkout session created", {
+      sessionId: session.id,
+      url: session.url,
+    });
+  } catch (error) {
+    console.error("Error creating checkout session:", error);
+    return sendResponse(res, 500, false, "Internal server error");
+  }
+};
