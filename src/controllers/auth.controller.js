@@ -76,3 +76,20 @@ exports.login = async (req, res) => {
     return sendResponse(res, 500, false, "Internal server error.");
   }
 };
+
+exports.logout = (req, res) => {
+  try {
+    res.cookie("token", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Strict",
+      expires: new Date(0),
+    });
+
+    console.log(`User logged out successfully`);
+    return sendResponse(res, 200, true, "Logout successful.");
+  } catch (error) {
+    console.error("Logout error:", error);
+    return sendResponse(res, 500, false, "Internal server error.");
+  }
+};

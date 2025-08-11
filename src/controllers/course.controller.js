@@ -1,6 +1,7 @@
 const Course = require("../models/course.model");
 const { generateUploadURL } = require("../services/s3Service");
 const { sendResponse } = require("../utils/sendResponse");
+const User = require("../models/user.model");
 const mongoose = require("mongoose");
 
 exports.createCourse = async (req, res) => {
@@ -164,3 +165,41 @@ exports.fetchCourseById = async (req, res) => {
     return sendResponse(res, 500, false, "Internal server error");
   }
 };
+
+exports.fetchPurchasedCourses = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+
+    if (!userId) {
+      return sendResponse(res, 401, false, "Unauthorized: No user logged in");
+    }
+
+    const user = await User.findById(userId)
+      .populate({
+        path: "purchasedCourses",
+        populate: { path: "instructor", select: "name email" },
+      })
+      .select("purchasedCourses");
+
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    if (!user.purchasedCourses || user.purchasedCourses.length === 0) {
+      return sendResponse(res, 200, true, "No purchased courses found", []);
+    }
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Purchased courses fetched successfully",
+      user.purchasedCourses
+    );
+  } catch (err) {
+    console.error("Error fetching purchased courses:", err);
+    return sendResponse(res, 500, false, "Internal server error");
+  }
+};
+
+

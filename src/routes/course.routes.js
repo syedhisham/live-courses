@@ -3,6 +3,7 @@ const router = express.Router();
 const courseController = require("../controllers/course.controller");
 const auth = require("../middleware/auth.middleware");
 const instructorOnly = require("../middleware/instructor-only.middleware");
+const studentOnly = require("../middleware/student-only.middleware");
 
 // Create course (instructor only)
 router.post("/create", auth, instructorOnly, courseController.createCourse);
@@ -24,9 +25,11 @@ router.post(
 );
 
 // List all courses
-router.get("/list", courseController.listCourses);
+router.get("/list", auth, studentOnly, courseController.listCourses);
 
 // Fetch course by ID
 router.get("/fetch/:courseId", courseController.fetchCourseById);
+
+router.get("/purchased",auth, studentOnly, courseController.fetchPurchasedCourses);
 
 module.exports = router;
