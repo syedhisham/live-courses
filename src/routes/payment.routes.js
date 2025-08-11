@@ -5,7 +5,7 @@ const auth = require("../middleware/auth.middleware");
 const paymentController = require("../controllers/payment.controller");
 const studentOnly = require("../middleware/student-only.middleware");
 
-// Route to create Stripe checkout session (user must be logged in)
+// Route to create Stripe checkout session
 router.post(
   "/create-checkout-session",
   auth,
@@ -13,10 +13,9 @@ router.post(
   paymentController.createCheckoutSession
 );
 
-// Stripe webhook endpoint (no auth, must receive raw body)
+// Stripe webhook endpoint
 router.post(
   "/webhook",
-  express.raw({ type: "application/json" }),
   paymentController.stripeWebhookHandler
 );
 
