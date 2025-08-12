@@ -1,5 +1,3 @@
-Certainly! Here's the full corrected **README.md** with only the single Zoom endpoint you specified, and all other details intact:
-
 ````markdown
 # Online Learning Platform - Backend API
 
@@ -154,7 +152,6 @@ This backend API powers a secure online learning platform where:
 * Zoom OAuth requires setting correct redirect URLs in Zoom Developer Console.
 * Keep your AWS credentials secure and restrict S3 bucket permissions.
 
-
 ---
 
 ## Contact
@@ -162,4 +159,3 @@ This backend API powers a secure online learning platform where:
 Syed Hisham Ali Shah — [syedhishamshah27@gmail.com](mailto:syedhishamshah27@gmail.com)
 [GitHub](https://github.com/yourusername)
 
-```
