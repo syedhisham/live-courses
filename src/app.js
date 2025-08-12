@@ -12,10 +12,13 @@ connectDB();
 
 // Middleware for CORS, cookies, logging
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: [
+    'http://localhost:3000',
+    'https://live-courses-frontend.vercel.app'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,  // if you use cookies or auth headers
+  credentials: true,
 }));
 
 app.use(cookieParser());
