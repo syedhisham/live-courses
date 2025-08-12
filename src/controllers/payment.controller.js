@@ -2,8 +2,27 @@ const Stripe = require("stripe");
 const Course = require("../models/course.model");
 const User = require("../models/user.model");
 const { sendResponse } = require("../utils/sendResponse");
+const axios = require("axios");
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+async function getUsdFromPkr(pkrAmount) {
+  try {
+    const res = await axios.get("https://open.er-api.com/v6/latest/PKR");
+    console.log("Conversion API response:", res.data);
+
+    if (!res.data || !res.data.rates || typeof res.data.rates.USD !== "number") {
+      throw new Error("Invalid conversion API response");
+    }
+
+    const usdRate = res.data.rates.USD;
+    return pkrAmount * usdRate;
+  } catch (err) {
+    console.error("Currency conversion error:", err.message);
+    throw new Error("Currency conversion failed");
+  }
+}
+
 
 exports.createCheckoutSession = async (req, res) => {
   try {
@@ -26,12 +45,17 @@ exports.createCheckoutSession = async (req, res) => {
       return sendResponse(res, 401, false, "User not found");
     }
 
-     // Check if user already purchased the course
+    // Check if user already purchased the course
     const alreadyPurchased = user.purchasedCourses.some(
       (purchasedId) => purchasedId.toString() === courseId
     );
     if (alreadyPurchased) {
-      return sendResponse(res, 400, false, "You have already purchased this course");
+      return sendResponse(
+        res,
+        400,
+        false,
+        "You have already purchased this course"
+      );
     }
 
     // Create Stripe customer if not exists
@@ -46,6 +70,9 @@ exports.createCheckoutSession = async (req, res) => {
       await user.save();
     }
 
+    const usdPrice = await getUsdFromPkr(course.price);
+    const usdCents = Math.round(usdPrice * 100);
+
     // Create checkout session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -59,7 +86,7 @@ exports.createCheckoutSession = async (req, res) => {
               name: course.title,
               description: course.description,
             },
-            unit_amount: Math.round(course.price * 100), // price in cents
+            unit_amount: usdCents, // price in cents
           },
           quantity: 1,
         },
@@ -128,7 +155,9 @@ exports.stripeWebhookHandler = async (req, res) => {
       }
 
       // Add user to course's students array if not already there
-      if (!course.students.some(id => id.toString() === user._id.toString())) {
+      if (
+        !course.students.some((id) => id.toString() === user._id.toString())
+      ) {
         course.students.push(user._id);
         await course.save();
         console.log(`User ${user.email} added to course.students`);
