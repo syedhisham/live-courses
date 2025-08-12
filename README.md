@@ -156,5 +156,4 @@ This backend API powers a secure online learning platform where:
 ## Contact
 
 Syed Hisham Ali Shah — [syedhishamshah27@gmail.com](mailto:syedhishamshah27@gmail.com)
-[GitHub](https://github.com/yourusername)
 
