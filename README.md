@@ -61,7 +61,7 @@ This backend API powers a secure online learning platform where:
    ```bash
    git clone https://github.com/syedhisham/live-courses.git
    cd live-courses
-````
+```
 
 2. Install dependencies:
 
