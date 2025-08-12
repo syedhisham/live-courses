@@ -11,7 +11,13 @@ const app = express();
 connectDB();
 
 // Middleware for CORS, cookies, logging
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:3000',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,  // if you use cookies or auth headers
+}));
+
 app.use(cookieParser());
 app.use(morgan("dev"));
 
@@ -20,6 +26,7 @@ const authRoutes = require("./routes/auth.routes");
 const courseRoutes = require("./routes/course.routes");
 const paymentRoutes = require('./routes/payment.routes');
 const paymentController = require("./controllers/payment.controller");
+const userRoutes = require("./routes/user.routes");
 
 // Handle webhook route BEFORE express.json()
 app.post(
@@ -34,6 +41,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/users', userRoutes);
 
 // Test Route
 app.get("/", (req, res) => res.send("LiveCourses API is running"));

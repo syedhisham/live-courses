@@ -21,6 +21,7 @@ async function generateUploadURL(key, contentType) {
   });
 
   const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 }); 
+  return url;
 }
 
 module.exports = { generateUploadURL };

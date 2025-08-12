@@ -1,6 +1,7 @@
 const Course = require("../models/course.model");
 const { generateUploadURL } = require("../services/s3Service");
 const { sendResponse } = require("../utils/sendResponse");
+const User = require("../models/user.model");
 const mongoose = require("mongoose");
 
 exports.createCourse = async (req, res) => {
@@ -62,6 +63,8 @@ exports.getUploadURL = async (req, res) => {
     const key = `courses/${courseId}/${timestamp}-${fileName}`;
 
     const url = await generateUploadURL(key, contentType);
+    console.log("Generated URL:", url);
+
 
     return sendResponse(res, 200, true, "Upload URL generated", {
       uploadURL: url,
@@ -78,35 +81,24 @@ exports.addMaterialToCourse = async (req, res) => {
   try {
     const instructorId = req.user._id;
     const { courseId } = req.params;
-    const { key, url, filename, contentType } = req.body;
+    const { key, filename, contentType, url } = req.body;
 
-    if (!key || !url) {
-      return sendResponse(res, 400, false, "Material key and url are required");
+    if (!key) {
+      return sendResponse(res, 400, false, "Material key is required");
     }
 
     const course = await Course.findById(courseId);
-    if (!course) {
-      return sendResponse(res, 404, false, "Course not found");
-    }
-
+    if (!course) return sendResponse(res, 404, false, "Course not found");
     if (course.instructor.toString() !== instructorId.toString()) {
-      return sendResponse(
-        res,
-        403,
-        false,
-        "Access denied: Not the course instructor"
-      );
+      return sendResponse(res, 403, false, "Access denied: Not the course instructor");
     }
 
-    // Check if material already added by key
-    const exists = course.materials.some((material) => material.key === key);
-    if (exists) {
-      return sendResponse(res, 400, false, "Material already added");
-    }
+    const exists = course.materials.some((m) => m.key === key);
+    if (exists) return sendResponse(res, 400, false, "Material already added");
 
     course.materials.push({
-      key,
       url,
+      key,
       filename,
       contentType,
       uploadedAt: new Date(),
@@ -122,9 +114,47 @@ exports.addMaterialToCourse = async (req, res) => {
   }
 };
 
+// When a student clicks "Watch"
+exports.getMaterialAccessUrl = async (req, res) => {
+  const { courseId, materialId } = req.params;
+  const studentId = req.user._id;
+
+  const course = await Course.findById(courseId);
+  if (!course) return sendResponse(res, 404, false, "Course not found");
+
+  // Verify student is enrolled/paid
+  const isEnrolled = course.students.includes(studentId);
+  if (!isEnrolled) return sendResponse(res, 403, false, "Not enrolled");
+
+  const material = course.materials.id(materialId);
+  if (!material) return sendResponse(res, 404, false, "Material not found");
+
+  const s3 = new AWS.S3();
+  const url = s3.getSignedUrl("getObject", {
+    Bucket: process.env.S3_BUCKET,
+    Key: material.key,
+    Expires: 60, // 1 minute
+  });
+
+  return sendResponse(res, 200, true, "Access granted", { url });
+};
+
+
 exports.listCourses = async (req, res) => {
   try {
-    const courses = await Course.find().populate("instructor", "name email");
+    const userId = req.user._id;
+
+    // Fetch user to get purchasedCourses
+    const user = await User.findById(userId).select("purchasedCourses");
+    if (!user) {
+      return sendResponse(res, 401, false, "User not found");
+    }
+
+    // Find only courses NOT purchased by this user
+    const courses = await Course.find({
+      _id: { $nin: user.purchasedCourses }
+    }).populate("instructor", "name email");
+
     return sendResponse(
       res,
       200,
@@ -137,6 +167,7 @@ exports.listCourses = async (req, res) => {
     return sendResponse(res, 500, false, "Internal server error");
   }
 };
+
 
 exports.fetchCourseById = async (req, res) => {
   try {
@@ -164,3 +195,41 @@ exports.fetchCourseById = async (req, res) => {
     return sendResponse(res, 500, false, "Internal server error");
   }
 };
+
+exports.fetchPurchasedCourses = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+
+    if (!userId) {
+      return sendResponse(res, 401, false, "Unauthorized: No user logged in");
+    }
+
+    const user = await User.findById(userId)
+      .populate({
+        path: "purchasedCourses",
+        populate: { path: "instructor", select: "name email" },
+      })
+      .select("purchasedCourses");
+
+    if (!user) {
+      return sendResponse(res, 404, false, "User not found");
+    }
+
+    if (!user.purchasedCourses || user.purchasedCourses.length === 0) {
+      return sendResponse(res, 200, true, "No purchased courses found", []);
+    }
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Purchased courses fetched successfully",
+      user.purchasedCourses
+    );
+  } catch (err) {
+    console.error("Error fetching purchased courses:", err);
+    return sendResponse(res, 500, false, "Internal server error");
+  }
+};
+
+

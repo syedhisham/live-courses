@@ -42,13 +42,12 @@ exports.login = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      console.log("Login failed: Missing email or password");
-      return sendResponse(res, 400, false, "Email and password are required.");
+      return sendResponse(res, 400, false, "All fields are required");
     }
 
     const user = await User.findOne({ email });
     if (!user) {
-      return sendResponse(res, 401, false, "Invalid email or password.");
+      return sendResponse(res, 401, false, "Invalid credentials");
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -73,6 +72,23 @@ exports.login = async (req, res) => {
     return sendResponse(res, 200, true, "Login successful.");
   } catch (error) {
     console.error("Login error:", error);
+    return sendResponse(res, 500, false, "Internal server error.");
+  }
+};
+
+exports.logout = (req, res) => {
+  try {
+    res.cookie("token", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Strict",
+      expires: new Date(0),
+    });
+
+    console.log(`User logged out successfully`);
+    return sendResponse(res, 200, true, "Logout successful.");
+  } catch (error) {
+    console.error("Logout error:", error);
     return sendResponse(res, 500, false, "Internal server error.");
   }
 };
