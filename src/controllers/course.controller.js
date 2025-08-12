@@ -3,6 +3,16 @@ const { generateUploadURL } = require("../services/s3Service");
 const { sendResponse } = require("../utils/sendResponse");
 const User = require("../models/user.model");
 const mongoose = require("mongoose");
+const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
 
 exports.createCourse = async (req, res) => {
   try {
@@ -116,29 +126,34 @@ exports.addMaterialToCourse = async (req, res) => {
 
 // When a student clicks "Watch"
 exports.getMaterialAccessUrl = async (req, res) => {
-  const { courseId, materialId } = req.params;
-  const studentId = req.user._id;
+  try {
+    const { courseId, materialId } = req.params;
+    const studentId = req.user._id;
 
-  const course = await Course.findById(courseId);
-  if (!course) return sendResponse(res, 404, false, "Course not found");
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ success: false, message: "Course not found" });
 
-  // Verify student is enrolled/paid
-  const isEnrolled = course.students.includes(studentId);
-  if (!isEnrolled) return sendResponse(res, 403, false, "Not enrolled");
+    // Check if student enrolled
+    if (!course.students.some(id => id.toString() === studentId.toString())) {
+      return res.status(403).json({ success: false, message: "You are not enrolled in this course" });
+    }
 
-  const material = course.materials.id(materialId);
-  if (!material) return sendResponse(res, 404, false, "Material not found");
+    const material = course.materials.id(materialId);
+    if (!material) return res.status(404).json({ success: false, message: "Material not found" });
 
-  const s3 = new AWS.S3();
-  const url = s3.getSignedUrl("getObject", {
-    Bucket: process.env.S3_BUCKET,
-    Key: material.key,
-    Expires: 60, // 1 minute
-  });
+    const command = new GetObjectCommand({
+      Bucket: process.env.AWS_BUCKET_NAME,
+      Key: material.key,
+    });
 
-  return sendResponse(res, 200, true, "Access granted", { url });
+    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 60 * 5 }); // valid for 5 minutes
+
+    return res.json({ success: true, url: signedUrl });
+  } catch (error) {
+    console.error("Error generating signed URL:", error);
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
 };
-
 
 exports.listCourses = async (req, res) => {
   try {

@@ -32,4 +32,6 @@ router.get("/fetch/:courseId", courseController.fetchCourseById);
 
 router.get("/purchased",auth, studentOnly, courseController.fetchPurchasedCourses);
 
+router.get("/:courseId/materials/:materialId/access-url",auth, studentOnly, courseController.getMaterialAccessUrl);
+
 module.exports = router;
