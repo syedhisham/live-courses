@@ -1,4 +1,3 @@
-````markdown
 # Online Learning Platform - Backend API
 
 [![Node.js](https://img.shields.io/badge/node-%3E%3D14-green)](https://nodejs.org/)
