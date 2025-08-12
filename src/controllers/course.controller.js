@@ -5,6 +5,7 @@ const User = require("../models/user.model");
 const mongoose = require("mongoose");
 const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const Session = require("../models/session.model");
 
 const s3Client = new S3Client({
   region: process.env.AWS_REGION,
@@ -13,6 +14,7 @@ const s3Client = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 });
+
 
 exports.createCourse = async (req, res) => {
   try {
@@ -124,7 +126,161 @@ exports.addMaterialToCourse = async (req, res) => {
   }
 };
 
+// exports.scheduleLiveSession = async (req, res) => {
+//   try {
+//     const { courseId, startTime } = req.body;
+//     const instructorId = req.user._id;
+
+//     if (!courseId || !startTime) {
+//       return sendResponse(res, 400, false, "courseId and startTime are required");
+//     }
+
+//     const course = await Course.findById(courseId);
+//     if (!course) return sendResponse(res, 404, false, "Course not found");
+
+//     if (course.instructor.toString() !== instructorId.toString()) {
+//       return sendResponse(res, 403, false, "Not the course instructor");
+//     }
+
+//     const session = await Session.create({
+//       course: courseId,
+//       instructor: instructorId,
+//       startTime,
+//     });
+
+//     return sendResponse(res, 201, true, "Live session scheduled", session);
+//   } catch (err) {
+//     console.error("Error scheduling live session:", err);
+//     return sendResponse(res, 500, false, "Internal server error");
+//   }
+// };
+
+
+async function getZoomAccessToken() {
+  const res = await axios.post(
+    `https://zoom.us/oauth/token`,
+    new URLSearchParams({
+      grant_type: "account_credentials",
+      account_id: process.env.ZOOM_ACCOUNT_ID,
+    }).toString(),
+    {
+      auth: {
+        username: process.env.ZOOM_CLIENT_ID,
+        password: process.env.ZOOM_CLIENT_SECRET,
+      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    }
+  );
+  return res.data.access_token;
+}
+
+exports.scheduleLiveSession = async (req, res) => {
+  try {
+    const { courseId, startTime } = req.body;
+    const instructorId = req.user._id;
+
+    if (!courseId || !startTime) {
+      return sendResponse(res, 400, false, "courseId and startTime are required");
+    }
+
+    const course = await Course.findById(courseId);
+    if (!course) return sendResponse(res, 404, false, "Course not found");
+
+    if (course.instructor.toString() !== instructorId.toString()) {
+      return sendResponse(res, 403, false, "Not the course instructor");
+    }
+
+    // Get Zoom token first
+    const accessToken = await getZoomAccessToken();
+
+    // Create Zoom meeting
+    const zoomRes = await axios.post(
+      `https://api.zoom.us/v2/users/me/meetings`,
+      {
+        topic: `Live session for ${course.title}`,
+        type: 2, // scheduled meeting
+        start_time: startTime,
+        duration: 60,
+        timezone: "UTC",
+        settings: {
+          host_video: true,
+          participant_video: true,
+          join_before_host: false,
+        },
+      },
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    // Create session in DB with Zoom details
+    const session = await LiveSession.create({
+      course: courseId,
+      instructor: instructorId,
+      startTime,
+      zoomMeetingId: zoomRes.data.id,
+      zoomJoinUrl: zoomRes.data.join_url,
+      zoomStartUrl: zoomRes.data.start_url,
+      status: "started", // if you want it to be 'scheduled' until start time, change this
+    });
+
+    return sendResponse(res, 201, true, "Live session created & Zoom meeting scheduled", session);
+  } catch (err) {
+    console.error("Error creating live session:", err?.response?.data || err);
+    return sendResponse(res, 500, false, "Internal server error");
+  }
+};
+
+// exports.startLiveSession = async (req, res) => {
+//   try {
+//     const { sessionId } = req.params;
+//     const instructorId = req.user._id;
+
+//     const session = await LiveSession.findById(sessionId).populate("course");
+//     if (!session) return sendResponse(res, 404, false, "Session not found");
+
+//     if (session.instructor.toString() !== instructorId.toString()) {
+//       return sendResponse(res, 403, false, "Not your session");
+//     }
+
+//     // Get Zoom token
+//     const accessToken = await getZoomAccessToken();
+
+//     // Create Zoom meeting
+//     const zoomRes = await axios.post(
+//       `https://api.zoom.us/v2/users/me/meetings`,
+//       {
+//         topic: `Live session for ${session.course.title}`,
+//         type: 2, // scheduled meeting
+//         start_time: session.startTime,
+//         duration: 60,
+//         timezone: "UTC",
+//         settings: {
+//           host_video: true,
+//           participant_video: true,
+//           join_before_host: false,
+//         },
+//       },
+//       {
+//         headers: { Authorization: `Bearer ${accessToken}` },
+//       }
+//     );
+
+//     session.zoomMeetingId = zoomRes.data.id;
+//     session.zoomJoinUrl = zoomRes.data.join_url;
+//     session.zoomStartUrl = zoomRes.data.start_url;
+//     session.status = "started";
+//     await session.save();
+
+//     return sendResponse(res, 200, true, "Zoom meeting created", session);
+//   } catch (err) {
+//     console.error("Error starting live session:", err);
+//     return sendResponse(res, 500, false, "Internal server error");
+//   }
+// };
+
 // When a student clicks "Watch"
+
 exports.getMaterialAccessUrl = async (req, res) => {
   try {
     const { courseId, materialId } = req.params;
@@ -183,7 +339,6 @@ exports.listCourses = async (req, res) => {
   }
 };
 
-
 exports.fetchCourseById = async (req, res) => {
   try {
     const { courseId } = req.params;
@@ -219,27 +374,38 @@ exports.fetchPurchasedCourses = async (req, res) => {
       return sendResponse(res, 401, false, "Unauthorized: No user logged in");
     }
 
-    const user = await User.findById(userId)
-      .populate({
-        path: "purchasedCourses",
-        populate: { path: "instructor", select: "name email" },
-      })
-      .select("purchasedCourses");
+    // 1. Find all courses where the user is a student
+    const purchasedCourses = await Course.find({ students: userId })
+      .populate("instructor", "name email")
+      .lean();
 
-    if (!user) {
-      return sendResponse(res, 404, false, "User not found");
-    }
-
-    if (!user.purchasedCourses || user.purchasedCourses.length === 0) {
+    if (!purchasedCourses.length) {
       return sendResponse(res, 200, true, "No purchased courses found", []);
     }
+
+    // 2. Get all course IDs
+    const courseIds = purchasedCourses.map((c) => c._id);
+
+    // 3. Find all live sessions for these courses
+    const sessions = await Session.find({ course: { $in: courseIds } })
+      .select("course startTime zoomJoinUrl zoomStartUrl status createdAt")
+      .sort({ startTime: -1 })
+      .lean();
+
+    // 4. Attach sessions to the corresponding course
+    const coursesWithSessions = purchasedCourses.map((course) => ({
+      ...course,
+      sessions: sessions.filter(
+        (session) => session.course.toString() === course._id.toString()
+      ),
+    }));
 
     return sendResponse(
       res,
       200,
       true,
       "Purchased courses fetched successfully",
-      user.purchasedCourses
+      coursesWithSessions
     );
   } catch (err) {
     console.error("Error fetching purchased courses:", err);
@@ -247,4 +413,55 @@ exports.fetchPurchasedCourses = async (req, res) => {
   }
 };
 
+exports.fetchInstructorCourses = async (req, res) => {
+  try {
+    const userId = req.user?._id;
+
+    if (!userId) {
+      return sendResponse(res, 401, false, "Unauthorized: No user logged in");
+    }
+
+    const courses = await Course.find({ instructor: userId })
+      .populate("instructor", "name email")
+      .populate("students", "name email")
+      .sort({ createdAt: -1 });
+
+    if (!courses || courses.length === 0) {
+      return sendResponse(res, 200, true, "No courses found", []);
+    }
+
+    // Fetch sessions for these courses
+    const courseIds = courses.map(course => course._id);
+    const sessions = await Session.find({ course: { $in: courseIds } });
+
+    // Merge session info into courses
+    const coursesWithSessions = courses.map(course => {
+      const session = sessions.find(s => s.course.toString() === course._id.toString());
+      return {
+        ...course.toObject(),
+        session: session
+          ? {
+              _id: session._id,
+              startTime: session.startTime,
+              status: session.status,
+              zoomMeetingId: session.zoomMeetingId || null,
+              zoomJoinUrl: session.zoomJoinUrl || null,
+              zoomStartUrl: session.zoomStartUrl || null,
+            }
+          : null,
+      };
+    });
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Instructor courses fetched successfully",
+      coursesWithSessions
+    );
+  } catch (err) {
+    console.error("Error fetching instructor courses:", err);
+    return sendResponse(res, 500, false, "Internal server error");
+  }
+};
 

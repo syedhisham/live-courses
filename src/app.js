@@ -27,6 +27,7 @@ const courseRoutes = require("./routes/course.routes");
 const paymentRoutes = require('./routes/payment.routes');
 const paymentController = require("./controllers/payment.controller");
 const userRoutes = require("./routes/user.routes");
+const sessionRoutes = require("./routes/session.routes");
 
 // Handle webhook route BEFORE express.json()
 app.post(
@@ -42,6 +43,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/courses", courseRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/sessions', sessionRoutes);
 
 // Test Route
 app.get("/", (req, res) => res.send("LiveCourses API is running"));
