@@ -42,13 +42,12 @@ exports.login = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      console.log("Login failed: Missing email or password");
-      return sendResponse(res, 400, false, "Email and password are required.");
+      return sendResponse(res, 400, false, "All fields are required");
     }
 
     const user = await User.findOne({ email });
     if (!user) {
-      return sendResponse(res, 401, false, "Invalid email or password.");
+      return sendResponse(res, 401, false, "Invalid credentials");
     }
 
     const isMatch = await bcrypt.compare(password, user.password);

@@ -26,6 +26,14 @@ exports.createCheckoutSession = async (req, res) => {
       return sendResponse(res, 401, false, "User not found");
     }
 
+     // Check if user already purchased the course
+    const alreadyPurchased = user.purchasedCourses.some(
+      (purchasedId) => purchasedId.toString() === courseId
+    );
+    if (alreadyPurchased) {
+      return sendResponse(res, 400, false, "You have already purchased this course");
+    }
+
     // Create Stripe customer if not exists
     let customerId = user.stripeCustomerId;
     if (!customerId) {
@@ -117,6 +125,15 @@ exports.stripeWebhookHandler = async (req, res) => {
         console.log(
           `User ${user.email} already has access to course ${course.title}`
         );
+      }
+
+      // Add user to course's students array if not already there
+      if (!course.students.some(id => id.toString() === user._id.toString())) {
+        course.students.push(user._id);
+        await course.save();
+        console.log(`User ${user.email} added to course.students`);
+      } else {
+        console.log(`User ${user.email} already enrolled in course.students`);
       }
 
       return res.json({ received: true });
